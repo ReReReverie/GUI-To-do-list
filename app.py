@@ -12,7 +12,10 @@ import datetime
 from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory
 
-from utils import load_config, save_config, get_db_path, get_connection, init_db
+import subprocess
+import sys
+
+from utils import load_config, save_config, get_db_path, get_connection, init_db, is_configured
 
 app = Flask(__name__, static_folder='static')
 
@@ -23,6 +26,8 @@ app = Flask(__name__, static_folder='static')
 @app.route('/api/tasks', methods=['GET'])
 def get_active_tasks():
     """Return all active (unfinished) tasks."""
+    if not is_configured():
+        return jsonify({'error': 'Configuration required', 'configured': False}), 412
     conn = get_connection()
     rows = conn.execute(
         "SELECT id, task, added_at FROM tasks WHERE finished = 0 ORDER BY id ASC"
@@ -34,6 +39,8 @@ def get_active_tasks():
 @app.route('/api/tasks', methods=['POST'])
 def add_task():
     """Add a new task."""
+    if not is_configured():
+        return jsonify({'error': 'Configuration required', 'configured': False}), 412
     data = request.get_json(silent=True) or {}
     task_text = (data.get('task') or '').strip()
     if not task_text:
@@ -54,6 +61,8 @@ def add_task():
 @app.route('/api/tasks/<int:task_id>/finish', methods=['POST'])
 def finish_task(task_id: int):
     """Mark a task as finished."""
+    if not is_configured():
+        return jsonify({'error': 'Configuration required', 'configured': False}), 412
     finished_at = datetime.datetime.now().isoformat()
     conn = get_connection()
     result = conn.execute(
@@ -85,6 +94,8 @@ def get_history():
     Return per-day aggregated stats for the calendar heatmap and line graph.
     Each entry: { date, added, finished }
     """
+    if not is_configured():
+        return jsonify({'error': 'Configuration required', 'configured': False}), 412
     conn = get_connection()
     rows = conn.execute("""
         SELECT
@@ -129,15 +140,50 @@ def update_settings():
         new_db = new_dir_path / 'tasks.db'
 
         # Copy existing DB to new location if it exists and paths differ
-        if old_db != new_db and old_db.exists():
+        if old_db and old_db != new_db and old_db.exists():
             shutil.copy2(str(old_db), str(new_db))
 
         config['data_dir'] = str(new_dir_path)
         save_config(config)
+        
+        # Initialize database at new location
+        init_db()
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
     return jsonify({'success': True, 'data_dir': str(new_dir_path)})
+
+
+@app.route('/api/browse', methods=['POST'])
+def browse_directory():
+    """Open a native folder selection dialog and return the path."""
+    try:
+        # Run tkinter in a separate process to avoid Flask threading/GUI issues
+        script = (
+            "import tkinter as tk, tkinter.filedialog as fd; "
+            "root = tk.Tk(); "
+            "root.withdraw(); "
+            "root.attributes('-topmost', True); "
+            "print(fd.askdirectory(), end='')"
+        )
+        
+        # CREATE_NO_WINDOW = 0x08000000 on Windows
+        creationflags = 0x08000000 if sys.platform == 'win32' else 0
+        
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            creationflags=creationflags
+        )
+        
+        folder_selected = result.stdout.strip()
+        
+        if folder_selected:
+            return jsonify({'path': folder_selected})
+        return jsonify({'path': None})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # ---------------------------------------------------------------------------
 # Serve frontend

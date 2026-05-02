@@ -74,6 +74,10 @@ function showSection(name) {
 async function loadTasks() {
   try {
     const res = await fetch('/api/tasks');
+    if (res.status === 412) {
+      showSetupOverlay();
+      return;
+    }
     if (!res.ok) throw new Error('Network response not ok');
     const tasks = await res.json();
     renderTasks(tasks);
@@ -194,6 +198,10 @@ function escapeHtml(str) {
 
 async function fetchHistory() {
   const res = await fetch('/api/history');
+  if (res.status === 412) {
+    showSetupOverlay();
+    throw new Error('Unconfigured');
+  }
   if (!res.ok) throw new Error('Failed to fetch history');
   return await res.json();
 }
@@ -421,6 +429,64 @@ async function saveSettings() {
     status.textContent = `✓ Saved to: ${data.data_dir}`;
     status.className = 'settings-status';
     showToast('Settings saved!', 'success');
+    
+    // Refresh data in case we switched DBs
+    loadTasks();
+  } catch (err) {
+    status.textContent = `Error: ${err.message}`;
+    status.className = 'settings-status error';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function browseDirectory(inputId) {
+  try {
+    const res = await fetch('/api/browse', { method: 'POST' });
+    const data = await res.json();
+    if (data.path) {
+      document.getElementById(inputId).value = data.path;
+    }
+  } catch (err) {
+    console.error('Failed to browse directory:', err);
+    showToast('Failed to open folder picker.', 'error');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Initial Setup
+// ---------------------------------------------------------------------------
+
+function showSetupOverlay() {
+  document.getElementById('setup-overlay').classList.add('open');
+}
+
+async function saveInitialSetup() {
+  const dir = document.getElementById('setup-dir-input').value.trim();
+  const status = document.getElementById('setup-status');
+  const btn = document.getElementById('start-setup-btn');
+
+  if (!dir) {
+    status.textContent = 'Please enter a directory path.';
+    status.className = 'settings-status error';
+    return;
+  }
+
+  btn.disabled = true;
+  status.textContent = 'Setting up…';
+  
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data_dir: dir })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Unknown error');
+    
+    document.getElementById('setup-overlay').classList.remove('open');
+    showToast('Welcome to HabitFlow!', 'success');
+    loadTasks();
   } catch (err) {
     status.textContent = `Error: ${err.message}`;
     status.className = 'settings-status error';
@@ -438,5 +504,15 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('date-label').textContent =
     new Date().toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-  loadTasks();
+  // Initial check: if unconfigured, show setup overlay
+  fetch('/api/settings')
+    .then(r => r.json())
+    .then(cfg => {
+      if (!cfg.data_dir) {
+        showSetupOverlay();
+      } else {
+        loadTasks();
+      }
+    })
+    .catch(() => loadTasks());
 });
