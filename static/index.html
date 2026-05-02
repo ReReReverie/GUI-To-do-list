@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="A beautiful habit tracker and to-do list web app to visualize your daily productivity." />
+  <title>Habit Tracker — To-Do List</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<!-- ===================== SIDEBAR ===================== -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <span class="logo-icon">✦</span>
+    <span class="logo-text">HabitFlow</span>
+  </div>
+
+  <nav class="sidebar-nav">
+    <button class="nav-btn active" id="nav-tasks" onclick="showSection('tasks')">
+      <span class="nav-icon">☑</span> Tasks
+    </button>
+    <button class="nav-btn" id="nav-graph" onclick="showSection('graph')">
+      <span class="nav-icon">◈</span> Progress
+    </button>
+    <button class="nav-btn" id="nav-calendar" onclick="showSection('calendar')">
+      <span class="nav-icon">⊞</span> Calendar
+    </button>
+  </nav>
+
+  <button class="settings-btn" onclick="openSettings()" id="open-settings-btn">
+    <span>⚙</span> Settings
+  </button>
+</aside>
+
+<!-- ===================== MAIN CONTENT ===================== -->
+<main class="main-content">
+
+  <!-- === TASKS SECTION === -->
+  <section id="section-tasks" class="section active">
+    <header class="section-header">
+      <h1>Today's Tasks</h1>
+      <p class="section-subtitle" id="date-label"></p>
+    </header>
+
+    <div class="add-task-card glass-card">
+      <input
+        type="text"
+        id="task-input"
+        class="task-input"
+        placeholder="What do you want to accomplish today?"
+        maxlength="200"
+        autocomplete="off"
+        onkeydown="if(event.key==='Enter') addTask()"
+      />
+      <button class="btn-primary" id="add-task-btn" onclick="addTask()">
+        <span>+</span> Add Task
+      </button>
+    </div>
+
+    <div id="task-list" class="task-list">
+      <!-- Tasks injected by JS -->
+    </div>
+
+    <div id="empty-state" class="empty-state" style="display:none;">
+      <div class="empty-icon">🎉</div>
+      <p>All done! No active tasks.</p>
+    </div>
+  </section>
+
+  <!-- === GRAPH SECTION === -->
+  <section id="section-graph" class="section">
+    <header class="section-header">
+      <h1>Progress Graph</h1>
+      <p class="section-subtitle">Tasks finished per day over the last 30 days</p>
+    </header>
+    <div class="glass-card chart-card">
+      <canvas id="progress-chart"></canvas>
+    </div>
+  </section>
+
+  <!-- === CALENDAR SECTION === -->
+  <section id="section-calendar" class="section">
+    <header class="section-header">
+      <h1>Activity Calendar</h1>
+      <p class="section-subtitle">Your productivity heatmap — last 3 months</p>
+    </header>
+
+    <div class="glass-card calendar-legend-card">
+      <span class="legend-label">Less</span>
+      <span class="legend-cell" style="background:var(--cell-gray)"></span>
+      <span class="legend-cell" style="background:var(--cell-red)"></span>
+      <span class="legend-cell" style="background:var(--cell-green-dim)"></span>
+      <span class="legend-cell" style="background:var(--cell-green-mid)"></span>
+      <span class="legend-cell" style="background:var(--cell-green-bright)"></span>
+      <span class="legend-label">More</span>
+    </div>
+
+    <div class="glass-card calendar-card">
+      <div id="calendar-grid" class="calendar-grid">
+        <!-- Grid injected by JS -->
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ===================== SETTINGS MODAL ===================== -->
+<div id="settings-overlay" class="modal-overlay" onclick="closeSettings(event)">
+  <div class="modal glass-card" role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="modal-header">
+      <h2>Settings</h2>
+      <button class="modal-close" onclick="closeSettings()" aria-label="Close">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <label class="form-label" for="data-dir-input">Data Storage Directory</label>
+      <p class="form-hint">Where your <code>tasks.db</code> file is stored. Changing this will copy your existing data to the new location.</p>
+      <div class="dir-input-row">
+        <input type="text" id="data-dir-input" class="task-input" placeholder="e.g. C:\Users\You\Documents\HabitTracker" />
+      </div>
+      <p id="settings-status" class="settings-status"></p>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeSettings()">Cancel</button>
+      <button class="btn-primary" id="save-settings-btn" onclick="saveSettings()">Save & Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== TOAST ===================== -->
+<div id="toast" class="toast" role="alert" aria-live="polite"></div>
+
+<!-- Chart.js from CDN (cached by browser after first load) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
