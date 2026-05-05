@@ -10,6 +10,16 @@
 // State
 // ---------------------------------------------------------------------------
 let progressChart = null;
+let appSettings = {
+  theme: 'dark',
+  language: 'en-US',
+  page_layout: 'split',
+  time_format: '12h',
+  show_creation_time: true,
+  background_image: ''
+};
+let pendingBackgroundImage = null;
+let dailyCountdownTimer = null;
 
 // ---------------------------------------------------------------------------
 // Utilities
@@ -30,11 +40,20 @@ function showToast(message, type = '') {
   }, 3000);
 }
 
-/** Format ISO datetime string to a short human-readable time (e.g., "2:45 PM"). */
+/** Format ISO datetime string to a short human-readable time (e.g., "2:45 PM" or "14:45"). */
 function formatTime(iso) {
   if (!iso) return '';
   try {
-    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const date = new Date(iso);
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    const paddedMinute = String(minutes).padStart(2, '0');
+    if (appSettings.time_format === '24h') {
+      return `${String(hours).padStart(2, '0')}:${paddedMinute}`;
+    }
+    const hour = hours % 12 || 12;
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    return `${hour}:${paddedMinute} ${ampm}`;
   } catch { return ''; }
 }
 
@@ -43,7 +62,7 @@ function formatDate(dateStr) {
   if (!dateStr) return '';
   try {
     const [year, month, day] = dateStr.split('-').map(Number);
-    return new Date(year, month - 1, day).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return new Date(year, month - 1, day).toLocaleDateString(appSettings.language || 'en-US', { month: 'short', day: 'numeric' });
   } catch { return dateStr; }
 }
 
@@ -58,13 +77,109 @@ function todayStr() {
 // ---------------------------------------------------------------------------
 
 function showSection(name) {
+  const sectionMap = getVisibleSectionMap();
+  const targetSection = sectionMap[name] || name;
+  const sectionsToShow = getSectionsForView(targetSection);
+
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(`section-${name}`).classList.add('active');
-  document.getElementById(`nav-${name}`).classList.add('active');
 
-  if (name === 'graph')    renderGraph();
-  if (name === 'calendar') renderCalendar();
+  const navEl = document.getElementById(`nav-${name}`);
+  sectionsToShow.forEach(sectionName => {
+    const sectionEl = document.getElementById(`section-${sectionName}`);
+    if (sectionEl) sectionEl.classList.add('active');
+  });
+  if (navEl && navEl.style.display !== 'none') navEl.classList.add('active');
+  if (sectionsToShow.includes('graph')) renderGraph();
+  if (sectionsToShow.includes('calendar')) renderCalendar();
+  updateDailiesPanelVisibility();
+}
+
+function getVisibleSectionMap() {
+  if (appSettings.page_layout === 'tasks_progress') {
+    return { tasks: 'tasks', calendar: 'calendar', dailies: 'dailies' };
+  }
+  if (appSettings.page_layout === 'progress_calendar') {
+    return { tasks: 'tasks', graph: 'graph', dailies: 'dailies' };
+  }
+  if (appSettings.page_layout === 'all_three') {
+    return { tasks: 'tasks', dailies: 'dailies' };
+  }
+  return { tasks: 'tasks', graph: 'graph', calendar: 'calendar', dailies: 'dailies' };
+}
+
+function getSectionsForView(targetSection) {
+  if (appSettings.page_layout === 'tasks_progress' && targetSection === 'tasks') {
+    return ['tasks', 'graph'];
+  }
+  if (appSettings.page_layout === 'progress_calendar' && targetSection === 'graph') {
+    return ['graph', 'calendar'];
+  }
+  if (appSettings.page_layout === 'all_three' && targetSection === 'tasks') {
+    return ['tasks', 'graph', 'calendar'];
+  }
+  return [targetSection];
+}
+
+function applyPageLayout(layout) {
+  appSettings.page_layout = layout || 'split';
+  const navTasks = document.getElementById('nav-tasks');
+  const navGraph = document.getElementById('nav-graph');
+  const navCalendar = document.getElementById('nav-calendar');
+  const navDailies = document.getElementById('nav-dailies');
+
+  navTasks.style.display = '';
+  navGraph.style.display = '';
+  navCalendar.style.display = '';
+  navDailies.style.display = '';
+  navTasks.innerHTML = '<span class="nav-icon">☑</span> Tasks';
+  navGraph.innerHTML = '<span class="nav-icon">◈</span> Progress';
+  navCalendar.innerHTML = '<span class="nav-icon">⊞</span> Calendar';
+
+  if (appSettings.page_layout === 'tasks_progress') {
+    navTasks.innerHTML = '<span class="nav-icon">☑</span> Tasks + Progress';
+    navGraph.style.display = 'none';
+  } else if (appSettings.page_layout === 'progress_calendar') {
+    navGraph.innerHTML = '<span class="nav-icon">◈</span> Progress + Calendar';
+    navCalendar.style.display = 'none';
+  } else if (appSettings.page_layout === 'all_three') {
+    navTasks.innerHTML = '<span class="nav-icon">☑</span> Tasks + Progress + Calendar';
+    navGraph.style.display = 'none';
+    navCalendar.style.display = 'none';
+  }
+  localStorage.setItem('habitflow_page_layout', appSettings.page_layout);
+  updateDailiesPanelVisibility();
+}
+
+function toggleDailiesPanel(forceOpen) {
+  const panel = document.getElementById('dailies-panel');
+  const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : true;
+  panel.classList.toggle('open', shouldOpen);
+}
+
+function updateDailiesPanelVisibility() {
+  const tasksSection = document.getElementById('section-tasks');
+  const isTasksActive = tasksSection && tasksSection.classList.contains('active');
+  toggleDailiesPanel(Boolean(isTasksActive));
+}
+
+function getTimeLeftToMidnight() {
+  const now = new Date();
+  const end = new Date(now);
+  end.setHours(24, 0, 0, 0);
+  const diffMs = Math.max(0, end.getTime() - now.getTime());
+  const totalSec = Math.floor(diffMs / 1000);
+  const hours = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+  const minutes = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+  const seconds = String(totalSec % 60).padStart(2, '0');
+  return `${hours}:${minutes}:${seconds}`;
+}
+
+function updateDailyTimers() {
+  const left = getTimeLeftToMidnight();
+  document.querySelectorAll('[data-daily-timer]').forEach(el => {
+    el.textContent = `Time left today: ${left}`;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -101,12 +216,13 @@ function renderTasks(tasks) {
   tasks.forEach(task => {
     const item = document.createElement('div');
     item.className = 'task-item';
+    item.classList.add(`priority-${task.priority || 'medium'}`);
     item.id = `task-${task.id}`;
     item.innerHTML = `
       <button class="task-check-btn" title="Mark as done"
         onclick="finishTask(${task.id})" aria-label="Finish task: ${task.task}"></button>
       <span class="task-text">${escapeHtml(task.task)}</span>
-      <span class="task-date">${formatTime(task.added_at)}</span>
+      ${appSettings.show_creation_time ? `<span class="task-date">${formatTime(task.added_at)}</span>` : ''}
       <button class="task-delete-btn" title="Delete task"
         onclick="deleteTask(${task.id})" aria-label="Delete task: ${task.task}">✕</button>
     `;
@@ -116,7 +232,9 @@ function renderTasks(tasks) {
 
 async function addTask() {
   const input = document.getElementById('task-input');
+  const priorityInput = document.getElementById('priority-input');
   const text = input.value.trim();
+  const priority = priorityInput.value;
   if (!text) {
     input.focus();
     return;
@@ -129,7 +247,7 @@ async function addTask() {
     const res = await fetch('/api/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ task: text })
+      body: JSON.stringify({ task: text, priority })
     });
     if (!res.ok) throw new Error(await res.text());
     input.value = '';
@@ -179,6 +297,111 @@ async function deleteTask(id) {
     console.error('Failed to delete task:', err);
     if (item) item.classList.remove('finishing');
     showToast('Failed to delete task.', 'error');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Dailies
+// ---------------------------------------------------------------------------
+
+async function loadDailies() {
+  try {
+    const res = await fetch('/api/dailies/today');
+    if (res.status === 412) return;
+    if (!res.ok) throw new Error('Failed to load dailies');
+    const dailies = await res.json();
+    renderDailies(dailies);
+  } catch (err) {
+    console.error('Failed to load dailies:', err);
+    showToast('Failed to load dailies.', 'error');
+  }
+}
+
+function renderDailies(dailies) {
+  const list = document.getElementById('daily-list');
+  list.innerHTML = '';
+  if (dailies.length === 0) {
+    list.innerHTML = '<p class="daily-empty">No dailies yet. Add one above.</p>';
+    return;
+  }
+  dailies.forEach(daily => {
+    const iconHtml = daily.icon_file
+      ? `<img class="daily-icon-img" src="/user-icons/${encodeURIComponent(daily.icon_file)}" alt="">`
+      : `<span class="daily-icon-emoji">${escapeHtml(daily.icon_emoji || '✅')}</span>`;
+    const item = document.createElement('div');
+    item.className = 'daily-item';
+    item.innerHTML = `
+      <label class="daily-check-wrap">
+        <span class="daily-icon-wrap">${iconHtml}</span>
+        <input type="checkbox" ${daily.completed ? 'checked' : ''} onchange="toggleDaily(${daily.id})">
+        <div class="daily-text-wrap">
+          <span class="daily-title ${daily.completed ? 'done' : ''}">${escapeHtml(daily.title)}</span>
+          <span class="daily-timer" data-daily-timer>Time left today: --:--:--</span>
+        </div>
+      </label>
+      <button class="task-delete-btn" onclick="deleteDaily(${daily.id})" aria-label="Delete daily: ${daily.title}">✕</button>
+    `;
+    list.appendChild(item);
+  });
+  updateDailyTimers();
+}
+
+async function addDaily() {
+  const input = document.getElementById('daily-input');
+  const title = input.value.trim();
+  const iconMode = document.getElementById('daily-icon-mode').value;
+  const iconEmojiInput = document.getElementById('daily-icon-emoji').value.trim() || '✅';
+  const iconFileInput = document.getElementById('daily-icon-file');
+  if (!title) return;
+  try {
+    let iconFile = '';
+    if (iconMode === 'upload' && iconFileInput.files[0]) {
+      const formData = new FormData();
+      formData.append('icon', iconFileInput.files[0]);
+      const uploadRes = await fetch('/api/icons', { method: 'POST', body: formData });
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok) throw new Error(uploadData.error || 'Failed to upload icon');
+      iconFile = uploadData.file_name;
+    }
+    const res = await fetch('/api/dailies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, icon_emoji: iconEmojiInput, icon_file: iconFile })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    input.value = '';
+    iconFileInput.value = '';
+    await loadDailies();
+    renderCalendar();
+    showToast('Daily added.', 'success');
+  } catch (err) {
+    console.error('Failed to add daily:', err);
+    showToast('Failed to add daily.', 'error');
+  }
+}
+
+async function toggleDaily(id) {
+  try {
+    const res = await fetch(`/api/dailies/${id}/toggle`, { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    await loadDailies();
+    renderCalendar();
+  } catch (err) {
+    console.error('Failed to toggle daily:', err);
+    showToast('Failed to update daily.', 'error');
+  }
+}
+
+async function deleteDaily(id) {
+  try {
+    const res = await fetch(`/api/dailies/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(await res.text());
+    await loadDailies();
+    renderCalendar();
+    showToast('Daily deleted.', '');
+  } catch (err) {
+    console.error('Failed to delete daily:', err);
+    showToast('Failed to delete daily.', 'error');
   }
 }
 
@@ -300,7 +523,13 @@ async function renderCalendar() {
 
     // Build a lookup map: date -> {added, finished}
     const dayMap = {};
-    history.forEach(d => { dayMap[d.date] = { added: d.added || 0, finished: d.finished || 0 }; });
+    history.forEach(d => {
+      dayMap[d.date] = {
+        added: d.added || 0,
+        finished: d.finished || 0,
+        all_dailies_done: Boolean(d.all_dailies_done)
+      };
+    });
 
     // Generate last 90 days as a grid of weeks
     const today = new Date();
@@ -346,6 +575,9 @@ async function renderCalendar() {
           // No tasks added — gray
           cell.style.background = 'var(--cell-gray)';
           cell.setAttribute('data-tip', `${label}: no tasks`);
+        } else if (stats.added === 0) {
+          cell.style.background = 'var(--cell-gray)';
+          cell.setAttribute('data-tip', `${label}: no tasks`);
         } else if (stats.finished === 0) {
           // Tasks exist but none finished — red
           cell.style.background = 'var(--cell-red)';
@@ -356,6 +588,10 @@ async function renderCalendar() {
           const color = getGreenColor(ratio);
           cell.style.background = color;
           cell.setAttribute('data-tip', `${label}: ${stats.finished}/${stats.added} done`);
+        }
+        if (stats && stats.all_dailies_done) {
+          cell.classList.add('calendar-cell-gold');
+          cell.setAttribute('data-tip', `${cell.getAttribute('data-tip')} • all dailies done`);
         }
 
         col.appendChild(cell);
@@ -389,11 +625,21 @@ function openSettings() {
   document.getElementById('settings-status').textContent = '';
   document.getElementById('settings-status').className = 'settings-status';
 
-  // Load current data dir
+  // Load current settings
   fetch('/api/settings')
     .then(r => r.json())
     .then(cfg => {
       document.getElementById('data-dir-input').value = cfg.data_dir || '';
+      document.getElementById('theme-input').value = cfg.theme || 'dark';
+      document.getElementById('language-input').value = cfg.language || 'en-US';
+      document.getElementById('time-format-input').value = cfg.time_format || '12h';
+      document.getElementById('show-creation-time-input').checked = cfg.show_creation_time !== false;
+      document.getElementById('background-image-input').value = '';
+      pendingBackgroundImage = null;
+      appSettings.background_image = cfg.background_image || '';
+      appSettings.time_format = cfg.time_format || '12h';
+      appSettings.show_creation_time = cfg.show_creation_time !== false;
+      applyBackgroundImage();
     })
     .catch(() => {});
 }
@@ -405,39 +651,122 @@ function closeSettings(event) {
 
 async function saveSettings() {
   const dir = document.getElementById('data-dir-input').value.trim();
+  const theme = document.getElementById('theme-input').value;
+  const language = document.getElementById('language-input').value;
+  const timeFormat = document.getElementById('time-format-input').value;
+  const showCreationTime = document.getElementById('show-creation-time-input').checked;
   const status = document.getElementById('settings-status');
   const btn = document.getElementById('save-settings-btn');
-
-  if (!dir) {
-    status.textContent = 'Please enter a directory path.';
-    status.className = 'settings-status error';
-    return;
-  }
 
   btn.disabled = true;
   status.textContent = 'Saving…';
   status.className = 'settings-status';
 
   try {
+    const payload = {
+      data_dir: dir,
+      theme,
+      language,
+      time_format: timeFormat,
+      show_creation_time: showCreationTime
+    };
+    if (pendingBackgroundImage !== null) {
+      payload.background_image = pendingBackgroundImage;
+    }
+
     const res = await fetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data_dir: dir })
+      body: JSON.stringify(payload)
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Unknown error');
     status.textContent = `✓ Saved to: ${data.data_dir}`;
     status.className = 'settings-status';
+    appSettings.theme = data.theme || 'dark';
+    appSettings.language = data.language || 'en-US';
+    appSettings.time_format = data.time_format || '12h';
+    appSettings.show_creation_time = data.show_creation_time !== false;
+    appSettings.background_image = data.background_image || '';
+    pendingBackgroundImage = null;
+    applyTheme(appSettings.theme);
+    applyBackgroundImage();
+    applyPageLayout(appSettings.page_layout);
+    refreshDateLabel();
     showToast('Settings saved!', 'success');
+    closeSettings();
     
-    // Refresh data in case we switched DBs
-    loadTasks();
+    // Refresh data in case we switched DBs or time format changed
+    await loadTasks();
+    loadDailies();
+    await renderGraph();
+    await renderCalendar();
+    showSection('tasks');
   } catch (err) {
     status.textContent = `Error: ${err.message}`;
     status.className = 'settings-status error';
   } finally {
     btn.disabled = false;
   }
+}
+
+function applyTheme(theme) {
+  document.body.setAttribute('data-theme', theme || 'dark');
+}
+
+function refreshDateLabel() {
+  document.getElementById('date-label').textContent =
+    new Date().toLocaleDateString(appSettings.language || 'en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+}
+
+function applyBackgroundImage() {
+  const body = document.body;
+  if (appSettings.background_image) {
+    body.style.backgroundImage = `url(${appSettings.background_image})`;
+    body.classList.add('custom-background');
+  } else {
+    body.style.backgroundImage = '';
+    body.classList.remove('custom-background');
+  }
+}
+
+function clearBackgroundImage() {
+  pendingBackgroundImage = '';
+  appSettings.background_image = '';
+  applyBackgroundImage();
+  const input = document.getElementById('background-image-input');
+  if (input) input.value = '';
+  showToast('Background image removed', 'success');
+}
+
+function handleBackgroundImageSelection(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) {
+    pendingBackgroundImage = null;
+    return;
+  }
+  if (!file.type.startsWith('image/')) {
+    showToast('Please choose an image file.', 'error');
+    event.target.value = '';
+    pendingBackgroundImage = null;
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    pendingBackgroundImage = reader.result;
+    showToast('Background image ready to save.', 'success');
+  };
+  reader.onerror = () => {
+    showToast('Failed to read image file.', 'error');
+    pendingBackgroundImage = null;
+  };
+  reader.readAsDataURL(file);
 }
 
 async function browseDirectory(inputId) {
@@ -500,19 +829,54 @@ async function saveInitialSetup() {
 // ---------------------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Set today's date in the header
-  document.getElementById('date-label').textContent =
-    new Date().toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
+  const savedLayout = localStorage.getItem('habitflow_page_layout');
   // Initial check: if unconfigured, show setup overlay
   fetch('/api/settings')
     .then(r => r.json())
     .then(cfg => {
+      appSettings.theme = cfg.theme || 'dark';
+      appSettings.language = cfg.language || 'en-US';
+      appSettings.time_format = cfg.time_format || '12h';
+      appSettings.show_creation_time = cfg.show_creation_time !== false;
+      appSettings.background_image = cfg.background_image || '';
+      appSettings.page_layout = 'split';
+      applyTheme(appSettings.theme);
+      applyBackgroundImage();
+      applyPageLayout(appSettings.page_layout);
+      refreshDateLabel();
       if (!cfg.data_dir) {
         showSetupOverlay();
       } else {
         loadTasks();
+        loadDailies();
+        showSection('tasks');
       }
     })
-    .catch(() => loadTasks());
+    .catch(() => {
+      appSettings.page_layout = 'split';
+      applyTheme('dark');
+      applyPageLayout(appSettings.page_layout);
+      refreshDateLabel();
+      loadTasks();
+      loadDailies();
+    });
+
+  const iconModeEl = document.getElementById('daily-icon-mode');
+  if (iconModeEl) {
+    iconModeEl.addEventListener('change', () => {
+      const mode = iconModeEl.value;
+      document.getElementById('daily-icon-emoji').style.display = mode === 'emoji' ? '' : 'none';
+      document.getElementById('daily-icon-file').style.display = mode === 'upload' ? '' : 'none';
+    });
+    iconModeEl.dispatchEvent(new Event('change'));
+  }
+
+  const bgInput = document.getElementById('background-image-input');
+  if (bgInput) {
+    bgInput.addEventListener('change', handleBackgroundImageSelection);
+  }
+
+  if (!dailyCountdownTimer) {
+    dailyCountdownTimer = setInterval(updateDailyTimers, 1000);
+  }
 });

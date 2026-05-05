@@ -1,3 +1,8 @@
 {
-    "data_dir": ""
+    "data_dir": "C:\\Users\\LANZ MARTENE GUIAB\\Documents\\Mangas",
+    "theme": "dark",
+    "language": "en-US",
+    "time_format": "24h",
+    "show_creation_time": true,
+    "background_image": ""
 }

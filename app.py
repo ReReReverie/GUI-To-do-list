@@ -15,7 +15,16 @@ from flask import Flask, jsonify, request, send_from_directory
 import subprocess
 import sys
 
-from utils import load_config, save_config, get_db_path, get_connection, init_db, is_configured
+from utils import (
+    load_config,
+    save_config,
+    get_db_path,
+    get_connection,
+    init_db,
+    is_configured,
+    format_timestamp,
+    get_show_creation_time,
+)
 
 app = Flask(__name__, static_folder='static')
 
@@ -33,7 +42,14 @@ def get_active_tasks():
         "SELECT id, task, added_at FROM tasks WHERE finished = 0 ORDER BY id ASC"
     ).fetchall()
     conn.close()
-    return jsonify([dict(r) for r in rows])
+    show_time = get_show_creation_time()
+    out = []
+    for r in rows:
+        d = dict(r)
+        if not show_time:
+            d.pop('added_at', None)
+        out.append(d)
+    return jsonify(out)
 
 
 @app.route('/api/tasks', methods=['POST'])
@@ -127,31 +143,50 @@ def update_settings():
     If the path changes, the existing database is copied to the new location.
     """
     data = request.get_json(silent=True) or {}
-    new_dir = (data.get('data_dir') or '').strip()
-    if not new_dir:
-        return jsonify({'error': 'data_dir is required.'}), 400
-
-    new_dir_path = Path(new_dir)
     config = load_config()
     old_db = get_db_path()
 
     try:
-        new_dir_path.mkdir(parents=True, exist_ok=True)
-        new_db = new_dir_path / 'tasks.db'
+        # If a new data_dir is provided and non-empty, handle DB move/creation
+        if 'data_dir' in data and (data.get('data_dir') or '').strip():
+            new_dir = (data.get('data_dir') or '').strip()
+            new_dir_path = Path(new_dir)
+            new_dir_path.mkdir(parents=True, exist_ok=True)
+            new_db = new_dir_path / 'tasks.db'
 
-        # Copy existing DB to new location if it exists and paths differ
-        if old_db and old_db != new_db and old_db.exists():
-            shutil.copy2(str(old_db), str(new_db))
+            if old_db and old_db != new_db and old_db.exists():
+                shutil.copy2(str(old_db), str(new_db))
 
-        config['data_dir'] = str(new_dir_path)
+            config['data_dir'] = str(new_dir_path)
+
+        # Merge other optional settings (don't require data_dir)
+        if 'theme' in data:
+            config['theme'] = data['theme']
+        if 'language' in data:
+            config['language'] = data['language']
+        if 'time_format' in data:
+            config['time_format'] = data['time_format']
+        if 'show_creation_time' in data:
+            config['show_creation_time'] = data['show_creation_time']
+        if 'background_image' in data:
+            config['background_image'] = data['background_image']
+
         save_config(config)
-        
-        # Initialize database at new location
+
+        # Initialize database at configured location if present
         init_db()
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-    return jsonify({'success': True, 'data_dir': str(new_dir_path)})
+    return jsonify({
+        'success': True, 
+        'data_dir': str(new_dir_path),
+        'theme': config.get('theme'),
+        'language': config.get('language'),
+        'time_format': config.get('time_format'),
+        'show_creation_time': config.get('show_creation_time'),
+        'background_image': config.get('background_image')
+    })
 
 
 @app.route('/api/browse', methods=['POST'])

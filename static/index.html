@@ -28,6 +28,9 @@
     <button class="nav-btn" id="nav-calendar" onclick="showSection('calendar')">
       <span class="nav-icon">⊞</span> Calendar
     </button>
+    <button class="nav-btn" id="nav-dailies" onclick="showSection('dailies')">
+      <span class="nav-icon">★</span> Dailies
+    </button>
   </nav>
 
   <button class="settings-btn" onclick="openSettings()" id="open-settings-btn">
@@ -41,8 +44,12 @@
   <!-- === TASKS SECTION === -->
   <section id="section-tasks" class="section active">
     <header class="section-header">
-      <h1>Today's Tasks</h1>
-      <p class="section-subtitle" id="date-label"></p>
+      <div class="tasks-header-row">
+        <div>
+          <h1>Today's Tasks</h1>
+          <p class="section-subtitle" id="date-label"></p>
+        </div>
+      </div>
     </header>
 
     <div class="add-task-card glass-card">
@@ -55,6 +62,11 @@
         autocomplete="off"
         onkeydown="if(event.key==='Enter') addTask()"
       />
+      <select id="priority-input" class="task-priority-select" aria-label="Task priority">
+        <option value="low">Low</option>
+        <option value="medium" selected>Medium</option>
+        <option value="high">High</option>
+      </select>
       <button class="btn-primary" id="add-task-btn" onclick="addTask()">
         <span>+</span> Add Task
       </button>
@@ -67,6 +79,45 @@
     <div id="empty-state" class="empty-state" style="display:none;">
       <div class="empty-icon">🎉</div>
       <p>All done! No active tasks.</p>
+    </div>
+
+    <aside id="dailies-panel" class="dailies-panel">
+      <div class="dailies-panel-header">
+        <h3>Dailies Quest</h3>
+      </div>
+      <p class="form-hint">Complete all before midnight for a gold calendar border.</p>
+      <div id="daily-list" class="daily-list"></div>
+    </aside>
+  </section>
+
+  <!-- === DAILIES SECTION === -->
+  <section id="section-dailies" class="section">
+    <header class="section-header">
+      <h1>Dailies Setup</h1>
+      <p class="section-subtitle">Create and manage your daily items here.</p>
+    </header>
+    <div class="glass-card dailies-card">
+      <p class="form-hint">These dailies also appear in the Tasks page window on the right.</p>
+      <div class="dailies-add-row">
+        <input
+          type="text"
+          id="daily-input"
+          class="task-input"
+          placeholder="Add a daily routine item"
+          maxlength="120"
+          autocomplete="off"
+          onkeydown="if(event.key==='Enter') addDaily()"
+        />
+      </div>
+      <div class="daily-icon-row">
+        <select id="daily-icon-mode" class="task-input daily-icon-mode">
+          <option value="emoji">Use Emoji Icon</option>
+          <option value="upload">Upload Custom Icon</option>
+        </select>
+        <input type="text" id="daily-icon-emoji" class="task-input daily-icon-emoji" maxlength="4" value="✅" />
+        <input type="file" id="daily-icon-file" class="task-input daily-icon-file" accept=".png,.jpg,.jpeg,.gif,.webp,.svg,image/*" />
+        <button class="btn-secondary" onclick="addDaily()">Add Daily</button>
+      </div>
     </div>
   </section>
 
@@ -145,6 +196,39 @@
         <input type="text" id="data-dir-input" class="task-input" placeholder="e.g. C:\Users\You\Documents\HabitTracker" />
         <button class="btn-secondary" onclick="browseDirectory('data-dir-input')">Browse…</button>
       </div>
+      <label class="form-label settings-gap" for="theme-input">Theme</label>
+      <select id="theme-input" class="task-input">
+        <option value="dark">Dark</option>
+        <option value="light">Light</option>
+        <option value="ocean">Ocean</option>
+      </select>
+      <label class="form-label settings-gap" for="language-input">Language</label>
+      <select id="language-input" class="task-input">
+        <option value="en-US">English (US)</option>
+        <option value="en-GB">English (UK)</option>
+        <option value="es-ES">Spanish</option>
+        <option value="fr-FR">French</option>
+        <option value="de-DE">German</option>
+        <option value="it-IT">Italian</option>
+        <option value="pt-BR">Portuguese (Brazil)</option>
+        <option value="ja-JP">Japanese</option>
+        <option value="ko-KR">Korean</option>
+        <option value="zh-CN">Chinese (Simplified)</option>
+        <option value="fil-PH">Filipino</option>
+      </select>
+      <label class="form-label settings-gap" for="time-format-input">Time Format</label>
+      <select id="time-format-input" class="task-input">
+        <option value="12h">12 hour</option>
+        <option value="24h">24 hour</option>
+      </select>
+      <label class="form-label settings-gap" for="background-image-input">Custom background image</label>
+      <input type="file" id="background-image-input" class="task-input" accept="image/*" />
+      <button type="button" class="btn-secondary" id="clear-background-btn" onclick="clearBackgroundImage()">Remove background</button>
+      <label class="form-label settings-gap" for="show-creation-time-input">Show task creation time</label>
+      <div class="checkbox-row">
+        <input type="checkbox" id="show-creation-time-input" />
+        <label for="show-creation-time-input">Display created time for tasks</label>
+      </div>
       <p id="settings-status" class="settings-status"></p>
     </div>
 
@@ -160,6 +244,6 @@
 
 <!-- Chart.js from CDN (cached by browser after first load) -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v=2"></script>
 </body>
 </html>
