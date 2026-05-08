@@ -222,7 +222,7 @@
         <option value="24h">24 hour</option>
       </select>
       <label class="form-label settings-gap" for="background-image-input">Custom background image</label>
-      <input type="file" id="background-image-input" class="task-input" accept="image/*" />
+      <input type="file" id="background-image-input" class="task-input" accept="image/*" onchange="handleBackgroundImageSelection(event)" />
       <button type="button" class="btn-secondary" id="clear-background-btn" onclick="clearBackgroundImage()">Remove background</button>
       <label class="form-label settings-gap" for="show-creation-time-input">Show task creation time</label>
       <div class="checkbox-row">

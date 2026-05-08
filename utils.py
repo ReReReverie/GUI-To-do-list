@@ -171,6 +171,28 @@ def init_db() -> None:
                 FOREIGN KEY(template_id) REFERENCES daily_templates(id) ON DELETE CASCADE
             )
         ''')
+        
+        # New tables for Groups and Tasks
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS daily_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id INTEGER NOT NULL,
+                task_text TEXT NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(group_id) REFERENCES daily_templates(id) ON DELETE CASCADE
+            )
+        ''')
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS daily_task_completions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                completed_date TEXT NOT NULL,
+                completed_at TEXT NOT NULL,
+                UNIQUE(task_id, completed_date),
+                FOREIGN KEY(task_id) REFERENCES daily_tasks(id) ON DELETE CASCADE
+            )
+        ''')
 
         # Lightweight migration for old databases.
         task_columns = {
@@ -185,6 +207,27 @@ def init_db() -> None:
             conn.execute("ALTER TABLE daily_templates ADD COLUMN icon_emoji TEXT NOT NULL DEFAULT '✅'")
         if 'icon_file' not in daily_columns:
             conn.execute("ALTER TABLE daily_templates ADD COLUMN icon_file TEXT")
+        if 'color' not in daily_columns:
+            conn.execute("ALTER TABLE daily_templates ADD COLUMN color TEXT")
+
+        # Migrate existing daily_templates to daily_tasks and daily_task_completions
+        existing_groups = conn.execute("SELECT id, title, created_at FROM daily_templates").fetchall()
+        for group in existing_groups:
+            has_tasks = conn.execute("SELECT COUNT(*) FROM daily_tasks WHERE group_id = ?", (group['id'],)).fetchone()[0] > 0
+            if not has_tasks:
+                cur = conn.execute(
+                    "INSERT INTO daily_tasks (group_id, task_text, created_at) VALUES (?, ?, ?)",
+                    (group['id'], group['title'], group['created_at'])
+                )
+                new_task_id = cur.lastrowid
+                
+                # Copy old completions to new table
+                old_completions = conn.execute("SELECT completed_date, completed_at FROM daily_completions WHERE template_id = ?", (group['id'],)).fetchall()
+                for oc in old_completions:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO daily_task_completions (task_id, completed_date, completed_at) VALUES (?, ?, ?)",
+                        (new_task_id, oc['completed_date'], oc['completed_at'])
+                    )
 
         conn.commit()
         conn.close()

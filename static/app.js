@@ -13,7 +13,6 @@ let progressChart = null;
 let appSettings = {
   theme: 'dark',
   language: 'en-US',
-  page_layout: 'split',
   time_format: '12h',
   show_creation_time: true,
   background_image: ''
@@ -77,77 +76,17 @@ function todayStr() {
 // ---------------------------------------------------------------------------
 
 function showSection(name) {
-  const sectionMap = getVisibleSectionMap();
-  const targetSection = sectionMap[name] || name;
-  const sectionsToShow = getSectionsForView(targetSection);
-
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
 
+  const sectionEl = document.getElementById(`section-${name}`);
+  if (sectionEl) sectionEl.classList.add('active');
+
   const navEl = document.getElementById(`nav-${name}`);
-  sectionsToShow.forEach(sectionName => {
-    const sectionEl = document.getElementById(`section-${sectionName}`);
-    if (sectionEl) sectionEl.classList.add('active');
-  });
   if (navEl && navEl.style.display !== 'none') navEl.classList.add('active');
-  if (sectionsToShow.includes('graph')) renderGraph();
-  if (sectionsToShow.includes('calendar')) renderCalendar();
-  updateDailiesPanelVisibility();
-}
 
-function getVisibleSectionMap() {
-  if (appSettings.page_layout === 'tasks_progress') {
-    return { tasks: 'tasks', calendar: 'calendar', dailies: 'dailies' };
-  }
-  if (appSettings.page_layout === 'progress_calendar') {
-    return { tasks: 'tasks', graph: 'graph', dailies: 'dailies' };
-  }
-  if (appSettings.page_layout === 'all_three') {
-    return { tasks: 'tasks', dailies: 'dailies' };
-  }
-  return { tasks: 'tasks', graph: 'graph', calendar: 'calendar', dailies: 'dailies' };
-}
-
-function getSectionsForView(targetSection) {
-  if (appSettings.page_layout === 'tasks_progress' && targetSection === 'tasks') {
-    return ['tasks', 'graph'];
-  }
-  if (appSettings.page_layout === 'progress_calendar' && targetSection === 'graph') {
-    return ['graph', 'calendar'];
-  }
-  if (appSettings.page_layout === 'all_three' && targetSection === 'tasks') {
-    return ['tasks', 'graph', 'calendar'];
-  }
-  return [targetSection];
-}
-
-function applyPageLayout(layout) {
-  appSettings.page_layout = layout || 'split';
-  const navTasks = document.getElementById('nav-tasks');
-  const navGraph = document.getElementById('nav-graph');
-  const navCalendar = document.getElementById('nav-calendar');
-  const navDailies = document.getElementById('nav-dailies');
-
-  navTasks.style.display = '';
-  navGraph.style.display = '';
-  navCalendar.style.display = '';
-  navDailies.style.display = '';
-  navTasks.innerHTML = '<span class="nav-icon">☑</span> Tasks';
-  navGraph.innerHTML = '<span class="nav-icon">◈</span> Progress';
-  navCalendar.innerHTML = '<span class="nav-icon">⊞</span> Calendar';
-
-  if (appSettings.page_layout === 'tasks_progress') {
-    navTasks.innerHTML = '<span class="nav-icon">☑</span> Tasks + Progress';
-    navGraph.style.display = 'none';
-  } else if (appSettings.page_layout === 'progress_calendar') {
-    navGraph.innerHTML = '<span class="nav-icon">◈</span> Progress + Calendar';
-    navCalendar.style.display = 'none';
-  } else if (appSettings.page_layout === 'all_three') {
-    navTasks.innerHTML = '<span class="nav-icon">☑</span> Tasks + Progress + Calendar';
-    navGraph.style.display = 'none';
-    navCalendar.style.display = 'none';
-  }
-  localStorage.setItem('habitflow_page_layout', appSettings.page_layout);
+  if (name === 'graph') renderGraph();
+  if (name === 'calendar') renderCalendar();
   updateDailiesPanelVisibility();
 }
 
@@ -691,7 +630,6 @@ async function saveSettings() {
     pendingBackgroundImage = null;
     applyTheme(appSettings.theme);
     applyBackgroundImage();
-    applyPageLayout(appSettings.page_layout);
     refreshDateLabel();
     showToast('Settings saved!', 'success');
     closeSettings();
